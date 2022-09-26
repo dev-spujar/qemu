@@ -156,11 +156,6 @@ enum {
     VIRTIO_SNDPCM_F_EVT_XRUNS
 };
 
-/* PCM stream flags */
-enum {
-    VIRTIO_SND_PCM_FL_CHMAP = 0
-};
-
 /* Supported sample formats */
 enum {
     /* analog formats (width / physical width) */
@@ -267,13 +262,6 @@ typedef struct virtio_snd_pcm_status {
 
 /* CHANNEL MAP CONTROL MESSAGES */
 
-typedef struct virtio_snd_chmap_hdr {
-    /* .code = VIRTIO_SND_R_CHMAP_* */
-    virtio_snd_hdr hdr;
-    /* 0 to (virtio_snd_config.chmaps - 1) */
-    uint32_t chmap_id;
-} virtio_snd_chmap_hdr;
-
 /* standard channel position definition */
 enum {
     VIRTIO_SND_CHMAP_NONE = 0,  /* undefined */
@@ -352,7 +340,9 @@ typedef struct virtio_snd_pcm_stream {
     uint8_t channels_max;
     uint64_t formats; /* 1 << VIRTIO_SND_PCM_FMT_XXX */
     uint64_t rates; /* 1 << VIRTIO_SND_PCM_RATE_XXX */
-    int tail, r_pos, w_pos;
+    int r_pos, w_pos;
+    bool flushing;
+    uint8_t chmap[VIRTIO_SND_CHMAP_MAX_SIZE];
     VirtQueueElement **elems;
     VirtIOSound *s;
     union {
