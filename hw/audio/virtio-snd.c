@@ -130,6 +130,7 @@ static uint32_t virtio_snd_handle_jack_info(VirtIOSound *s,
     assert(sz == sizeof(virtio_snd_query_info));
 
     virtio_snd_hdr resp;
+    virtio_snd_jack_info *jack_info = g_new0(virtio_snd_jack_info, req.count);
 
     if (iov_size(elem->in_sg, elem->in_num) <
         sizeof(virtio_snd_hdr) + req.count * req.size) {
@@ -140,7 +141,6 @@ static uint32_t virtio_snd_handle_jack_info(VirtIOSound *s,
         goto done;
     }
 
-    virtio_snd_jack_info *jack_info = g_new0(virtio_snd_jack_info, req.count);
     for (int i = req.start_id; i < req.count + req.start_id; i++) {
         virtio_snd_jack *jack = virtio_snd_get_jack(s, i);
         if (!jack) {
@@ -233,6 +233,9 @@ static uint32_t virtio_snd_handle_pcm_info(VirtIOSound *s,
     assert(sz == sizeof(virtio_snd_query_info));
 
     virtio_snd_hdr resp;
+    virtio_snd_pcm_stream *stream;
+    virtio_snd_pcm_info *pcm_info = g_new0(virtio_snd_pcm_info, req.count);
+
     if (iov_size(elem->in_sg, elem->in_num) <
         sizeof(virtio_snd_hdr) + req.size * req.count) {
         virtio_snd_err("pcm info: buffer too small, got: %lu, needed: %lu\n",
@@ -242,8 +245,6 @@ static uint32_t virtio_snd_handle_pcm_info(VirtIOSound *s,
         goto done;
     }
 
-    virtio_snd_pcm_stream *stream;
-    virtio_snd_pcm_info *pcm_info = g_new0(virtio_snd_pcm_info, req.count);
     for (int i = req.start_id; i < req.start_id + req.count; i++) {
         stream = virtio_snd_pcm_get_stream(s, i);
 
