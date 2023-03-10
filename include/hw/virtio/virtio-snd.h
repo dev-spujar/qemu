@@ -7,6 +7,7 @@
 
 #include "qemu/units.h"
 #include "hw/virtio/virtio.h"
+#include "hw/virtio/vhost.h"
 #include "qemu/queue.h"
 #include "audio/audio.h"
 #include "audio/audio_int.h"
@@ -366,6 +367,9 @@ struct VirtIOSound {
     /* Parent VirtIODevice object */
     VirtIODevice parent_obj;
     virtio_snd_config snd_conf;
+
+    struct vhost_virtqueue vhost_vqs[4];
+    struct vhost_dev vhost_dev;
 
     VirtQueue *ctrl_vq;
     VirtQueue *event_vq;
