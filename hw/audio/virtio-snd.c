@@ -43,6 +43,9 @@
 #define virtio_snd_warn(...) AUD_log("virtio sound warn", __VA_ARGS__)
 #define virtio_snd_err(...) AUD_log("virtio sound err", __VA_ARGS__)
 
+/* TODO: replace this with runtime control */
+#define VHOST_SOUND_BACKEND 1
+
 static void virtio_snd_get_config(VirtIODevice *vdev, uint8_t *config)
 {
     VirtIOSound *s = VIRTIO_SOUND(vdev);
@@ -1240,20 +1243,103 @@ static void virtio_snd_reset(VirtIODevice *vdev)
 {
 }
 
+static void vhost_snd_dummy_handle(VirtIODevice *vdev, VirtQueue *vq)
+{
+}
+
+static void vhost_snd_device_realize(DeviceState *dev, Error **errp)
+{
+	VirtIODevice *vdev = VIRTIO_DEVICE(dev);
+	VirtIOSound *snd = VIRTIO_SOUND(vdev);
+	int vhostfd, ret;
+
+	vhostfd = open("/dev/vhost-snd", O_RDWR);
+	if (vhostfd < 0) {
+		// print error : TODO
+		return;
+	}
+
+	virtio_init(vdev, "vhost-snd", VIRTIO_ID_SOUND,
+		    sizeof(virtio_snd_config));
+
+	snd->ctrl_vq = virtio_add_queue(vdev, 64, vhost_snd_dummy_handle);
+	snd->event_vq = virtio_add_queue(vdev, 64, vhost_snd_dummy_handle);
+	snd->tx_vq = virtio_add_queue(vdev, 64, vhost_snd_dummy_handle);
+	snd->rx_vq = virtio_add_queue(vdev, 64, vhost_snd_dummy_handle);
+
+	snd->vhost_dev.nvqs = ARRAY_SIZE(snd->vhost_vqs);
+	snd->vhost_dev.vqs = snd->vhost_vqs;
+	snd->vhost_dev.vq_index = 0;
+
+	ret = vhost_dev_init(&snd->vhost_dev, (void *)(uintptr_t)vhostfd,
+			     VHOST_BACKEND_TYPE_KERNEL, 0, errp);
+	if (ret < 0) {
+		// print error : TODO
+	}
+}
+
+/* TODO: implement cleanup */
+static void vhost_snd_device_unrealize(DeviceState *dev)
+{
+}
+
+static void vhost_snd_set_status(VirtIODevice *vdev, uint8_t status)
+{
+	VirtIOSound *snd = VIRTIO_SOUND(vdev);
+	BusState *qbus = BUS(qdev_get_parent_bus(DEVICE(vdev)));
+	VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(qbus);
+	int ret, i;
+
+	ret = vhost_dev_enable_notifiers(&snd->vhost_dev, vdev);
+	if (ret < 0) {
+		// print error : TODO
+		return;
+	}
+
+	ret = k->set_guest_notifiers(qbus->parent, snd->vhost_dev.nvqs, true);
+	if (ret < 0) {
+		// print error : TODO
+		return;
+	}
+	ret = vhost_dev_start(&snd->vhost_dev, vdev);
+	if (ret < 0) {
+		// print error : TODO
+		return;
+	}
+
+	for (i = 0; i < snd->vhost_dev.nvqs; i++) {
+		vhost_virtqueue_mask(&snd->vhost_dev, vdev,
+			snd->vhost_dev.vq_index + i, false);
+	}
+}
+
 static void virtio_snd_class_init(ObjectClass *klass, void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     VirtioDeviceClass *vdc = VIRTIO_DEVICE_CLASS(klass);
+    bool use_vhost = false;
+
+#ifdef VHOST_SOUND_BACKEND
+    use_vhost = true;
+#endif
 
     device_class_set_props(dc, virtio_snd_properties);
     dc->vmsd = &vmstate_virtio_snd;
     set_bit(DEVICE_CATEGORY_SOUND, dc->categories);
+
     vdc->realize = virtio_snd_device_realize;
     vdc->unrealize = virtio_snd_device_unrealize;
     vdc->get_config = virtio_snd_get_config;
     vdc->set_config = virtio_snd_set_config;
     vdc->get_features = virtio_snd_get_features;
     vdc->reset = virtio_snd_reset;
+
+    if (use_vhost) {
+        vdc->realize = vhost_snd_device_realize;
+        vdc->unrealize = vhost_snd_device_unrealize;
+        vdc->set_status = vhost_snd_set_status;
+    }
+
     vdc->legacy_features = 0;
     vdc->vmsd = &vmstate_virtio_snd_device;
 }
